@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
@@ -12,19 +11,19 @@ pub enum Op {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Value<T> {
+pub struct ValueData<T> {
     pub data: T,
     pub label: String,
     op: Op,
-    prev: BTreeSet<ValueRef<T>>,
+    prev: BTreeSet<Value<T>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ValueRef<T> {
-    val: Rc<RefCell<Value<T>>>,
+pub struct Value<T> {
+    val: Rc<RefCell<ValueData<T>>>,
 }
 
-impl<T: fmt::Display + fmt::Debug> fmt::Display for ValueRef<T> {
+impl<T: fmt::Display + fmt::Debug> fmt::Display for Value<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
@@ -37,10 +36,10 @@ impl<T: fmt::Display + fmt::Debug> fmt::Display for ValueRef<T> {
     }
 }
 
-impl<T: Clone> ValueRef<T> {
+impl<T: Clone> Value<T> {
     pub fn new(data: T, label: String) -> Self {
         Self {
-            val: Rc::new(RefCell::new(Value {
+            val: Rc::new(RefCell::new(ValueData {
                 data,
                 label,
                 op: Op::Nop,
@@ -51,7 +50,7 @@ impl<T: Clone> ValueRef<T> {
 
     pub fn new_from_op(data: T, label: String, op: Op, children: BTreeSet<Self>) -> Self {
         Self {
-            val: Rc::new(RefCell::new(Value {
+            val: Rc::new(RefCell::new(ValueData {
                 data,
                 label,
                 op,
@@ -75,10 +74,10 @@ impl<T: Clone> ValueRef<T> {
 
 // Lifetimes for the Value reference inside the BTreeSet are already getting a little gnarley - I will probably want to instead use Rc shared pointers?
 // impl<'a, T: ops::Add<Output = T> + cmp::Ord + Copy> ops::Add for &'a Value<T> {
-impl<T: ops::Add<Output = T> + cmp::Ord + Copy> ops::Add for ValueRef<T> {
-    type Output = ValueRef<T>;
+impl<T: ops::Add<Output = T> + cmp::Ord + Copy> ops::Add for Value<T> {
+    type Output = Value<T>;
     fn add(self, rhs: Self) -> Self::Output {
-        ValueRef::new_from_op(
+        Value::new_from_op(
             self.val.as_ref().borrow().data + rhs.val.as_ref().borrow().data,
             format!(
                 "({} {:?} {})",
@@ -92,10 +91,10 @@ impl<T: ops::Add<Output = T> + cmp::Ord + Copy> ops::Add for ValueRef<T> {
     }
 }
 
-impl<T: ops::Mul<Output = T> + cmp::Ord + Copy> ops::Mul for ValueRef<T> {
-    type Output = ValueRef<T>;
+impl<T: ops::Mul<Output = T> + cmp::Ord + Copy> ops::Mul for Value<T> {
+    type Output = Value<T>;
     fn mul(self, rhs: Self) -> Self::Output {
-        ValueRef::new_from_op(
+        Value::new_from_op(
             self.val.as_ref().borrow().data * rhs.val.as_ref().borrow().data,
             format!(
                 "({} {:?} {})",
@@ -115,14 +114,14 @@ mod tests {
 
     #[test]
     fn can_create_new() {
-        let v1 = ValueRef::new(1i32, String::from("v1"));
+        let v1 = Value::new(1i32, String::from("v1"));
         assert_eq!(v1.val.as_ref().borrow().data, 1i32);
     }
 
     #[test]
     fn can_add_value() {
-        let v1 = ValueRef::new(1i32, String::from("v1"));
-        let v2 = ValueRef::new(2i32, String::from("v2"));
+        let v1 = Value::new(1i32, String::from("v1"));
+        let v2 = Value::new(2i32, String::from("v2"));
         let v3 = v1.clone() + v2;
         println!("{}", v3);
         println!("{}", v1); // TODO - Impossible without clone on each op
@@ -131,22 +130,22 @@ mod tests {
 
     #[test]
     fn can_mul_value() {
-        let v1 = ValueRef::new(2i32, String::from("v1"));
-        let v2 = ValueRef::new(3i32, String::from("v2"));
+        let v1 = Value::new(2i32, String::from("v1"));
+        let v2 = Value::new(3i32, String::from("v2"));
         let v3 = v1 * v2;
         assert_eq!(v3.val.as_ref().borrow().data, 6i32);
     }
 
     #[test]
     fn can_backprop() {
-        let a = ValueRef::new(2, String::from("a"));
-        let b = ValueRef::new(-3, String::from("b"));
-        let c = ValueRef::new(10, String::from("c"));
+        let a = Value::new(2, String::from("a"));
+        let b = Value::new(-3, String::from("b"));
+        let c = Value::new(10, String::from("c"));
         let mut e = a * b;
         e.set_label(String::from("e"));
         let mut d = c + e;
         d.set_label(String::from("d"));
-        let f = ValueRef::new(-2, String::from("f"));
+        let f = Value::new(-2, String::from("f"));
         let mut L = f * d;
         L.set_label(String::from("d"));
         println!("{}", L);
